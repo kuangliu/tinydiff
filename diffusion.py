@@ -21,7 +21,7 @@ class DatasaurusDozen(Dataset):
         return self.points[i % len(self.points)]
 
     def __len__(self) -> int:
-        return len(self.points) * 50
+        return len(self.points) * 15
 
 
 class NoiseScheduler:
@@ -49,7 +49,7 @@ class NoiseScheduler:
 class SimpleMLP(nn.Module):
     def __init__(self):
         super().__init__()
-        dims = [4, 16, 128, 128, 16]
+        dims = [4, 16, 128, 128, 128, 128, 16]
         layers = []
         for input_dim, output_dim in pairwise(dims):
             layers.extend([nn.Linear(input_dim, output_dim), nn.GELU()])
@@ -114,37 +114,44 @@ def samples(model: nn.Module,
         yield xt
 
 
+def plot_batch(batch):
+    batch = batch.cpu().numpy()
+    plt.scatter(batch[:, 0], batch[:, 1], marker=".")
+
+
 # Prepare data
 dataset = DatasaurusDozen(csv_file="./data/DatasaurusDozen.tsv", dataset="dino")
-dataloader = DataLoader(dataset, batch_size=2130)
+dataloader = DataLoader(dataset, batch_size=len(dataset))
 
 # Noise scheduler
-noise_scheduler = NoiseScheduler(sigma_min=0.02, sigma_max=10.0, T=200)
+noise_scheduler = NoiseScheduler(sigma_min=0.01, sigma_max=10.0, T=200)
 
 # Define model
 model = SimpleMLP()
 
 # Train
-# num_epochs = 1000
-# criterion = nn.MSELoss()
-# optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
-# scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
-# model.train()
-# for epoch in range(num_epochs):
-#     print(f"Epoch: {epoch}")
-#     for x0 in dataloader:
-#         optimizer.zero_grad()
-#         x0, sigma, eps = generate_sample(x0, noise_scheduler)
-#         y = model(x0 + sigma[:, None] * eps, sigma)
-#         loss = criterion(y, eps)
-#         loss.backward()
-#         optimizer.step()
-#         print(f"Loss: {loss.item():.2f}")
-#     scheduler.step()
-# torch.save(model.state_dict(), "./checkpoint/model.pth")
-model.load_state_dict(torch.load("./checkpoint/model.pth"))
+num_epochs = 15000
+criterion = nn.MSELoss()
+optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
+model.train()
+for epoch in range(num_epochs):
+    print(f"Epoch: {epoch}")
+    for x0 in dataloader:
+        optimizer.zero_grad()
+        x0, sigma, eps = generate_sample(x0, noise_scheduler)
+        y = model(x0 + sigma[:, None] * eps, sigma)
+        loss = criterion(y, eps)
+        loss.backward()
+        optimizer.step()
+        print(f"Loss: {loss.item():.2f}")
+    scheduler.step()
+torch.save(model.state_dict(), "./checkpoint/model.pth")
+
+# Sampling
+# model.load_state_dict(torch.load("./checkpoint/model.pth"))
 *xts, x0 = samples(model, noise_scheduler.sample_sigmas(20), batch_size=1500, gam=2, mu=0)
 print(x0.shape)
 x0 = x0.detach().numpy()
 plt.scatter(x0[:, 0], x0[:, 1], marker='.')
-plt.show()
+plt.savefig("z.png")
