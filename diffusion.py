@@ -97,11 +97,17 @@ def generate_sample(x0, noise_scheduler):
     return x0, sigma, eps
 
 
+@torch.no_grad()
 def samples(model: nn.Module,
             sigmas: torch.Tensor,
             gam: float = 1.,
             mu: float = 0.,
             batch_size: int = 1):
+    """Generalizes most commonly-used samplers:
+      DDPM       : gam=1, mu=0.5
+      DDIM       : gam=1, mu=0
+      Accelerated: gam=2, mu=0
+    """
     model.eval()
     xt = torch.randn(batch_size, 2) * sigmas[0]
     eps = None
@@ -111,6 +117,20 @@ def samples(model: nn.Module,
         sig_p = (sig_prev/sig**mu)**(1/(1-mu))
         eta = (sig_prev**2 - sig_p**2).sqrt()
         xt = xt - (sig - sig_p) * eps_av + eta * torch.randn(len(xt), 2)
+        yield xt
+
+
+@torch.no_grad()
+def ddim_samples(model: nn.Module,
+                 sigmas: torch.Tensor,
+                 gam: float = 1.,
+                 mu: float = 0.,
+                 batch_size: int = 1):
+    model.eval()
+    xt = torch.randn(batch_size, 2) * sigmas[0]
+    for (sig, sig_prev) in pairwise(sigmas):
+        eps = model(xt, sig.repeat(len(xt)))
+        xt = xt - (sig - sig_prev) * eps
         yield xt
 
 
@@ -130,27 +150,27 @@ noise_scheduler = NoiseScheduler(sigma_min=0.01, sigma_max=10.0, T=200)
 model = SimpleMLP()
 
 # Train
-num_epochs = 15000
-criterion = nn.MSELoss()
-optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
-scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
-model.train()
-for epoch in range(num_epochs):
-    print(f"Epoch: {epoch}")
-    for x0 in dataloader:
-        optimizer.zero_grad()
-        x0, sigma, eps = generate_sample(x0, noise_scheduler)
-        y = model(x0 + sigma[:, None] * eps, sigma)
-        loss = criterion(y, eps)
-        loss.backward()
-        optimizer.step()
-        print(f"Loss: {loss.item():.2f}")
-    scheduler.step()
-torch.save(model.state_dict(), "./checkpoint/model.pth")
+# num_epochs = 15000
+# criterion = nn.MSELoss()
+# optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+# scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
+# model.train()
+# for epoch in range(num_epochs):
+#     print(f"Epoch: {epoch}")
+#     for x0 in dataloader:
+#         optimizer.zero_grad()
+#         x0, sigma, eps = generate_sample(x0, noise_scheduler)
+#         y = model(x0 + sigma[:, None] * eps, sigma)
+#         loss = criterion(y, eps)
+#         loss.backward()
+#         optimizer.step()
+#         print(f"Loss: {loss.item():.2f}")
+#     scheduler.step()
+# torch.save(model.state_dict(), "./checkpoint/model.pth")
 
 # Sampling
-# model.load_state_dict(torch.load("./checkpoint/model.pth"))
-*xts, x0 = samples(model, noise_scheduler.sample_sigmas(20), batch_size=1500, gam=2, mu=0)
+model.load_state_dict(torch.load("./checkpoint/model.pth"))
+*xts, x0 = ddim_samples(model, noise_scheduler.sample_sigmas(20), batch_size=1500, gam=2, mu=0)
 print(x0.shape)
 x0 = x0.detach().numpy()
 plt.scatter(x0[:, 0], x0[:, 1], marker='.')
