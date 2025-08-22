@@ -123,8 +123,6 @@ def samples(model: nn.Module,
 @torch.no_grad()
 def ddim_samples(model: nn.Module,
                  sigmas: torch.Tensor,
-                 gam: float = 1.,
-                 mu: float = 0.,
                  batch_size: int = 1):
     model.eval()
     xt = torch.randn(batch_size, 2) * sigmas[0]
@@ -139,39 +137,40 @@ def plot_batch(batch):
     plt.scatter(batch[:, 0], batch[:, 1], marker=".")
 
 
-# Prepare data
-dataset = DatasaurusDozen(csv_file="./data/DatasaurusDozen.tsv", dataset="dino")
-dataloader = DataLoader(dataset, batch_size=len(dataset))
+if __name__ == "__main__":
+    # Prepare data
+    dataset = DatasaurusDozen(csv_file="./data/DatasaurusDozen.tsv", dataset="dino")
+    dataloader = DataLoader(dataset, batch_size=len(dataset))
 
-# Noise scheduler
-noise_scheduler = NoiseScheduler(sigma_min=0.01, sigma_max=10.0, T=200)
+    # Noise scheduler
+    noise_scheduler = NoiseScheduler(sigma_min=0.01, sigma_max=10.0, T=200)
 
-# Define model
-model = SimpleMLP()
+    # Define model
+    model = SimpleMLP()
 
-# Train
-# num_epochs = 15000
-# criterion = nn.MSELoss()
-# optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
-# scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
-# model.train()
-# for epoch in range(num_epochs):
-#     print(f"Epoch: {epoch}")
-#     for x0 in dataloader:
-#         optimizer.zero_grad()
-#         x0, sigma, eps = generate_sample(x0, noise_scheduler)
-#         y = model(x0 + sigma[:, None] * eps, sigma)
-#         loss = criterion(y, eps)
-#         loss.backward()
-#         optimizer.step()
-#         print(f"Loss: {loss.item():.2f}")
-#     scheduler.step()
-# torch.save(model.state_dict(), "./checkpoint/model.pth")
+    # Train
+    # num_epochs = 15000
+    # criterion = nn.MSELoss()
+    # optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
+    # model.train()
+    # for epoch in range(num_epochs):
+    #     print(f"Epoch: {epoch}")
+    #     for x0 in dataloader:
+    #         optimizer.zero_grad()
+    #         x0, sigma, eps = generate_sample(x0, noise_scheduler)
+    #         y = model(x0 + sigma[:, None] * eps, sigma)
+    #         loss = criterion(y, eps)
+    #         loss.backward()
+    #         optimizer.step()
+    #         print(f"Loss: {loss.item():.2f}")
+    #     scheduler.step()
+    # torch.save(model.state_dict(), "./checkpoint/model.pth")
 
-# Sampling
-model.load_state_dict(torch.load("./checkpoint/model.pth"))
-*xts, x0 = ddim_samples(model, noise_scheduler.sample_sigmas(20), batch_size=1500, gam=2, mu=0)
-print(x0.shape)
-x0 = x0.detach().numpy()
-plt.scatter(x0[:, 0], x0[:, 1], marker='.')
-plt.savefig("z.png")
+    # Sampling
+    model.load_state_dict(torch.load("./checkpoint/model.pth"))
+    *xts, x0 = ddim_samples(model, noise_scheduler.sample_sigmas(20), batch_size=1500)
+    print(x0.shape)
+    x0 = x0.detach().numpy()
+    plt.scatter(x0[:, 0], x0[:, 1], marker='.')
+    plt.savefig("z.png")
